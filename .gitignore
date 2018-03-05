@@ -35,3 +35,4 @@ output.avi
 test_data/output.avi
 *.weights
 test_data/project_video.mp4
+uselib

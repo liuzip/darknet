@@ -7,6 +7,7 @@
 //
 // socket related abstractions:
 //
+#include <stdio.h>
 #ifdef _WIN32  
 #pragma comment(lib, "ws2_32.lib")
 #include <winsock.h>

@@ -27,3 +27,11 @@ Thumbs.db
 # CMake #
 cmake-build-debug/
 CMakeLists.txt
+face/oliver.jpg
+face/oliver.jpg
+face/predictions.jpg
+face/predictions_resized.jpg
+output.avi
+test_data/output.avi
+*.weights
+test_data/project_video.mp4

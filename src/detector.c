@@ -1022,21 +1022,6 @@ void run_detector(int argc, char **argv)
         demo(cfg, weights, thresh, cam_index, filename, names, classes, frame_skip, prefix, out_filename, 
 			http_stream_port, dont_show);
     }
-    else if(0==strcmp(argv[2], "detection")) {
-        list *options = read_data_cfg(datacfg);
-        int classes = option_find_int(options, "classes", 20);
-        char *name_list = option_find_str(options, "names", "data/names.list");
-        char **names = get_labels(name_list);
-		if(filename){
-			if (filename[strlen(filename) - 1] == 0x0d) filename[strlen(filename) - 1] = 0;
-        }
-        else{
-            fprintf(stderr, "Need to indicate the video file\n");
-            return;
-        }
-        detection(cfg, weights, thresh, filename, names, classes, frame_skip, prefix, out_filename, 
-			http_stream_port, dont_show);
-    }
 }
 
 

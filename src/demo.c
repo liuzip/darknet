@@ -1,6 +1,7 @@
 #include "network.h"
 #include "detection_layer.h"
 #include "region_layer.h"
+#include "convolutional_layer.h"
 #include "cost_layer.h"
 #include "utils.h"
 #include "parser.h"
@@ -28,6 +29,7 @@
 #endif
 image get_image_from_stream(CvCapture *cap);
 image crop_image_with_box(image im, int num, float thresh, box *boxes, float **probs, char **names, image **alphabet, int classes);
+float compare_image(image im_1, image im_2);
 
 static char **demo_names;
 static image **demo_alphabet;
@@ -52,6 +54,8 @@ static image images[FRAMES];
 static IplImage* ipl_images[FRAMES];
 static float *avg;
 
+struct face_list_st *g_face_list = NULL;
+
 void draw_detections_cv(IplImage* show_img, int num, float thresh, box *boxes, float **probs, char **names, image **alphabet, int classes);
 void show_image_cv_ipl(IplImage *disp, const char *name);
 image get_image_from_stream_resize(CvCapture *cap, int w, int h, IplImage** in_img);
@@ -68,7 +72,7 @@ void *fetch_in_thread(void *ptr)
     if(!in.data){
         //error("Stream closed.");
 		flag_exit = 1;
-		return;
+		return 0;
     }
     //in_s = resize_image(in, net.w, net.h);
 	in_s = make_image(in.w, in.h, in.c);
@@ -103,6 +107,7 @@ void *detect_in_thread(void *ptr)
     printf("\nFPS:%.1f\n",fps);
     printf("Objects:\n\n");
 
+
     images[demo_index] = det;
     det = images[(demo_index + FRAMES/2 + 1)%FRAMES];
 	ipl_images[demo_index] = det_img;
@@ -111,7 +116,48 @@ void *detect_in_thread(void *ptr)
 	    
 	//draw_detections(det, l.w*l.h*l.n, demo_thresh, boxes, probs, demo_names, demo_alphabet, demo_classes);
 	draw_detections_cv(det_img, l.w*l.h*l.n, demo_thresh, boxes, probs, demo_names, demo_alphabet, demo_classes);
+
+#if 0
+    // need siamese network
+        layer feature_layer = net.layers[net.n-2];
+
+        if(g_face_list == NULL){
+            g_face_list = malloc(sizeof(struct face_list_st));
+            memset(g_face_list, 0x0, sizeof(struct face_list_st));
+            g_face_list->face_feature = get_convolutional_image(feature_layer);
+            crop_image_with_box(det, l.w*l.h*l.n, demo_thresh, boxes, probs, demo_names, demo_alphabet, demo_classes);
+        }
+        else{
+            image feature_map = get_convolutional_image(feature_layer);
+            float threshold = 0.3;
+            int existed = 0;
+
+            struct face_list_st *face_ptr = NULL,
+                *last_face = g_face_list;
+
+            face_ptr = g_face_list;
+            while(face_ptr){
+                if(compare_image(face_ptr->face_feature, feature_map) < threshold){
+                    existed = 1;
+                    break;
+                }
+
+                last_face = face_ptr;
+                face_ptr = face_ptr->next;
+            }
+
+            if(existed == 0){
+                face_ptr = malloc(sizeof(struct face_list_st));
+                memset(face_ptr, 0x0, sizeof(struct face_list_st));
+                face_ptr->face_feature = feature_map;
+                last_face->next = face_ptr;
+                crop_image_with_box(det, l.w*l.h*l.n, demo_thresh, boxes, probs, demo_names, demo_alphabet, demo_classes);
+            }
+        }
+#else
     crop_image_with_box(det, l.w*l.h*l.n, demo_thresh, boxes, probs, demo_names, demo_alphabet, demo_classes);
+#endif
+
 
 	return 0;
 }
@@ -325,7 +371,6 @@ image crop_image_with_box(image im, int num, float thresh, box *boxes, float **p
                 alphabet = 0;
             }
 
-            printf("%s: %.0f%%\n", names[class_id], prob*100);
             int offset = class_id*123457 % classes;
             float red = get_color(2,offset,classes);
             float green = get_color(1,offset,classes);
@@ -361,5 +406,32 @@ image crop_image_with_box(image im, int num, float thresh, box *boxes, float **p
             free_image(tmp_im);
         }
     }
+}
+
+float compare_image(image im_1, image im_2){
+    if(im_1.w != im_2.w ||
+        im_1.h != im_2.h ||
+        im_1.c != im_2.c){
+        return 99999.9;
+    }
+
+    int width = im_1.w,
+        height = im_1.h,
+        channel = im_1.c,
+        x, y, c;
+
+    float norm = 0.0,
+        diff = 0.0;
+
+    for(x = 0; x < width; x ++){
+        for(y = 0; y < height; y ++){
+            for(c = 0; c < channel; c ++){
+                diff = get_pixel(im_1, x, y, c) - get_pixel(im_2, x, y, c);
+                norm = diff * diff;
+            }
+        }
+    }
+
+    return norm;
 }
 

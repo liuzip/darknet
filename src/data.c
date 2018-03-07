@@ -615,6 +615,58 @@ data load_data_compare(int n, char **paths, int m, int classes, int w, int h)
     return d;
 }
 
+data load_data_2_horizon_image(int n, char **paths, int m, int classes, int w, int h)
+{
+    if(m) paths = get_random_paths(paths, 2*n, m);
+    int i,j,x,y,c;
+    data d = {0};
+    float color;
+    
+    d.shallow = 0;
+
+    d.X.rows = n;
+    d.X.vals = calloc(d.X.rows, sizeof(float*));
+    d.X.cols = h*w*6;
+
+    int k = 2*(classes);
+    d.y = make_matrix(n, k);
+    for(i = 0; i < n; ++i){
+        image src_im = load_image_color(paths[i*2],   w, h);
+        image new_im = make_image(h, h, 6);
+
+        for(x = 0; x < w; x ++){
+            for(y = 0; y < h; y ++){
+                for(c = 0; c < 3; c ++){
+                    color = get_pixel(src_im, x, y, c);
+                    if(x < w/2){
+                        set_pixel(new_im, x, y, c, color);
+                    }
+                    else{
+                        set_pixel(new_im, x + w / 2, y, c * 2, color);
+                    }
+                }
+            }
+        }
+
+        d.X.vals[i] = calloc(d.X.cols, sizeof(float));
+        memcpy(d.X.vals[i], new_im.data, h*w*3*sizeof(float));
+
+        if(strstr(paths[i*2], "same") != NULL){
+            d.y.vals[i][0] = 1;
+        }
+        else if(strstr(paths[i*2], "diff") != NULL){
+            d.y.vals[i][0] = 0;
+        }
+        else{
+             d.y.vals[i][0] = SECRET_NUM;
+        }
+
+        free_image(src_im);
+    }
+    if(m) free(paths);
+    return d;
+}
+
 data load_data_swag(char **paths, int n, int classes, float jitter)
 {
     int index = random_gen()%n;
@@ -751,6 +803,8 @@ void *load_thread(void *ptr)
         *(a.resized) = resize_image(*(a.im), a.w, a.h);
     } else if (a.type == TAG_DATA){
         *a.d = load_data_tag(a.paths, a.n, a.m, a.classes, a.min, a.max, a.size, a.angle, a.aspect, a.hue, a.saturation, a.exposure);
+    } else if (a.type == COMPARE_2_HORZION_DATA){
+        *a.d = load_data_2_horizon_image(a.n, a.paths, a.m, a.classes, a.w, a.h);
     }
     free(ptr);
     return 0;

@@ -37,3 +37,5 @@ test_data/output.avi
 test_data/project_video.mp4
 uselib
 Makefile
+face_compare/train/*.jpg
+face_compare/test/*.jpg

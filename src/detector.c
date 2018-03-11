@@ -25,11 +25,13 @@
 #pragma comment(lib, "opencv_highgui" OPENCV_VERSION ".lib")
 #endif
 
-#endif
+IplImage* draw_train_chart(float max_img_loss, int max_batches, int number_of_lines, int img_size);
+void draw_train_loss(IplImage* img, int img_size, float avg_loss, float max_img_loss, int current_batch, int max_batches);
+#endif	// OPENCV
 
 static int coco_ids[] = {1,2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,27,28,31,32,33,34,35,36,37,38,39,40,41,42,43,44,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,67,70,72,73,74,75,76,77,78,79,80,81,82,84,85,86,87,88,89,90};
 
-void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, int ngpus, int clear)
+void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, int ngpus, int clear, int dont_show)
 {
     list *options = read_data_cfg(datacfg);
     char *train_images = option_find_str(options, "train", "data/train.list");
@@ -93,6 +95,15 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
     args.exposure = net.exposure;
     args.saturation = net.saturation;
     args.hue = net.hue;
+
+#ifdef OPENCV
+	IplImage* img = NULL;
+	float max_img_loss = 5;
+	int number_of_lines = 100;
+	int img_size = 1000;
+	if (!dont_show)
+		img = draw_train_chart(max_img_loss, net.max_batches, number_of_lines, img_size);
+#endif	//OPENCV
 
     pthread_t load_thread = load_data(args);
     clock_t time;
@@ -159,6 +170,12 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
 
         i = get_current_batch(net);
         printf("%d: %f, %f avg, %f rate, %lf seconds, %d images\n", get_current_batch(net), loss, avg_loss, get_current_rate(net), sec(clock()-time), i*imgs);
+
+#ifdef OPENCV
+		if(!dont_show)
+			draw_train_loss(img, img_size, avg_loss, max_img_loss, i, net.max_batches);
+#endif	// OPENCV
+
 		//if (i % 1000 == 0 || (i < 1000 && i % 100 == 0)) {
 		if (i % 100 == 0) {
 #ifdef GPU
@@ -176,140 +193,9 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
     char buff[256];
     sprintf(buff, "%s/%s_final.weights", backup_directory, base);
     save_weights(net, buff);
-}
 
-void two_image_train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, int ngpus, int clear)
-{
-    list *options = read_data_cfg(datacfg);
-    char *train_images = option_find_str(options, "train", "data/train.list");
-    char *backup_directory = option_find_str(options, "backup", "/backup/");
-
-    srand(time(0));
-    char *base = basecfg(cfgfile);
-    printf("%s\n", base);
-    float avg_loss = -1;
-    network *nets = calloc(ngpus, sizeof(network));
-
-    srand(time(0));
-    int seed = rand();
-    int i;
-    for(i = 0; i < ngpus; ++i){
-        srand(seed);
-#ifdef GPU
-        cuda_set_device(gpus[i]);
-#endif
-        nets[i] = parse_network_cfg(cfgfile);
-        if(weightfile){
-            load_weights(&nets[i], weightfile);
-        }
-        if(clear) *nets[i].seen = 0;
-        nets[i].learning_rate *= ngpus;
-    }
-    srand(time(0));
-    network net = nets[0];
-
-    int imgs = net.batch * net.subdivisions * ngpus;
-    printf("Learning Rate: %g, Momentum: %g, Decay: %g\n", net.learning_rate, net.momentum, net.decay);
-    data train, buffer;
-
-    layer l = net.layers[net.n - 1];
-
-    int classes = l.classes;
-    float jitter = l.jitter;
-
-    list *plist = get_paths(train_images);
-    //int N = plist->size;
-    char **paths = (char **)list_to_array(plist);
-
-	int init_w = net.w;
-	int init_h = net.h;
-
-    load_args args = {0};
-    args.w = net.w;
-    args.h = net.h;
-    args.paths = paths;
-    args.n = imgs;
-    args.m = plist->size;
-    args.classes = classes;
-    args.jitter = jitter;
-    args.num_boxes = l.max_boxes;
-	args.small_object = l.small_object;
-    args.d = &buffer;
-    args.type = COMPARE_2_HORZION_DATA;
-	args.threads = 4;// 8;
-
-    args.angle = net.angle;
-    args.exposure = net.exposure;
-    args.saturation = net.saturation;
-    args.hue = net.hue;
-
-    pthread_t load_thread = load_data(args);
-    clock_t time;
-    int count = 0;
-    //while(i*imgs < N*120){
-    while(get_current_batch(net) < net.max_batches){
-        /*
-		if(l.random && count++%10 == 0){
-            printf("Resizing\n");
-			int dim = (rand() % 12 + (init_w/32 - 5)) * 32;	// +-160
-            //int dim = (rand() % 10 + 10) * 32;
-            //if (get_current_batch(net)+100 > net.max_batches) dim = 544;
-            //int dim = (rand() % 4 + 16) * 32;
-            printf("%d\n", dim);
-            args.w = dim;
-            args.h = dim;
-
-            pthread_join(load_thread, 0);
-            train = buffer;
-            free_data(train);
-            load_thread = load_data(args);
-
-            for(i = 0; i < ngpus; ++i){
-                resize_network(nets + i, dim, dim);
-            }
-            net = nets[0];
-        }
-        */
-        time=clock();
-        pthread_join(load_thread, 0);
-        train = buffer;
-        load_thread = load_data(args);
-
-        printf("Loaded: %lf seconds\n", sec(clock()-time));
-
-        time=clock();
-        float loss = 0;
-#ifdef GPU
-        if(ngpus == 1){
-            loss = train_network(net, train);
-        } else {
-            loss = train_networks(nets, ngpus, train, 4);
-        }
-#else
-        loss = train_network(net, train);
-#endif
-        if (avg_loss < 0) avg_loss = loss;
-        avg_loss = avg_loss*.9 + loss*.1;
-
-        i = get_current_batch(net);
-        printf("%d: %f, %f avg, %f rate, %lf seconds, %d images\n", get_current_batch(net), loss, avg_loss, get_current_rate(net), sec(clock()-time), i*imgs);
-		//if (i % 1000 == 0 || (i < 1000 && i % 100 == 0)) {
-		if (i % 100 == 0) {
-#ifdef GPU
-			if (ngpus != 1) sync_nets(nets, ngpus, 0);
-#endif
-			char buff[256];
-			sprintf(buff, "%s/%s_%d.weights", backup_directory, base, i);
-			save_weights(net, buff);
-		}
-        free_data(train);
-    }
-#ifdef GPU
-    if(ngpus != 1) sync_nets(nets, ngpus, 0);
-#endif
-    char buff[256];
-    sprintf(buff, "%s/%s_final.weights", backup_directory, base);
-    save_weights(net, buff);
+	//cvReleaseImage(&img);
+	//cvDestroyAllWindows();
 }
 
 
@@ -941,7 +827,7 @@ void validate_detector_map(char *datacfg, char *cfgfile, char *weightfile, float
 }
 
 #ifdef OPENCV
-void calc_anchors(char *datacfg, int num_of_clusters, int final_width, int final_height)
+void calc_anchors(char *datacfg, int num_of_clusters, int final_width, int final_height, int show)
 {
 	printf("\n num_of_clusters = %d, final_width = %d, final_height = %d \n", num_of_clusters, final_width, final_height);
 
@@ -980,7 +866,6 @@ void calc_anchors(char *datacfg, int num_of_clusters, int final_width, int final
 	}
 	printf("\n all loaded. \n");
 
-	//int number_of_boxes = 10;
 	CvMat* points = cvCreateMat(number_of_boxes, 2, CV_32FC1);
 	CvMat* centers = cvCreateMat(num_of_clusters, 2, CV_32FC1);
 	CvMat* labels = cvCreateMat(number_of_boxes, 1, CV_32SC1);
@@ -993,7 +878,7 @@ void calc_anchors(char *datacfg, int num_of_clusters, int final_width, int final
 	}
 
 
-	const int attemps = 1000;
+	const int attemps = 10;
 	double compactness;
 
 	enum {
@@ -1005,18 +890,101 @@ void calc_anchors(char *datacfg, int num_of_clusters, int final_width, int final
 	printf("\n calculating k-means++ ...");
 	// Should be used: distance(box, centroid) = 1 - IoU(box, centroid)
 	cvKMeans2(points, num_of_clusters, labels, 
-		cvTermCriteria(CV_TERMCRIT_EPS+CV_TERMCRIT_ITER, 1000, 0), attemps, 
-		0, KMEANS_RANDOM_CENTERS, 
+		cvTermCriteria(CV_TERMCRIT_EPS+CV_TERMCRIT_ITER, 10000, 0), attemps, 
+		0, KMEANS_PP_CENTERS,
 		centers, &compactness);
+	
+	//orig 2.0 anchors = 1.08,1.19,  3.42,4.41,  6.63,11.38,  9.42,5.11,  16.62,10.52
+	//float orig_anch[] = { 1.08,1.19,  3.42,4.41,  6.63,11.38,  9.42,5.11,  16.62,10.52 };
+	// worse than ours (even for 19x19 final size - for input size 608x608)
 
-	printf("\n");
-	printf("anchors = ");
-	for (i = 0; i < num_of_clusters; ++i) {
-		printf("%2.2f,%2.2f, ", centers->data.fl[i * 2], centers->data.fl[i * 2 + 1]);
-	}
+	//orig anchors = 1.3221,1.73145, 3.19275,4.00944, 5.05587,8.09892, 9.47112,4.84053, 11.2364,10.0071
+	//float orig_anch[] = { 1.3221,1.73145, 3.19275,4.00944, 5.05587,8.09892, 9.47112,4.84053, 11.2364,10.0071 };
+	// orig (IoU=59.90%) better than ours (59.75%)
 
+	//gen_anchors.py = 1.19, 1.99, 2.79, 4.60, 4.53, 8.92, 8.06, 5.29, 10.32, 10.66
+	//float orig_anch[] = { 1.19, 1.99, 2.79, 4.60, 4.53, 8.92, 8.06, 5.29, 10.32, 10.66 };
+
+	// ours: anchors = 9.3813,6.0095, 3.3999,5.3505, 10.9476,11.1992, 5.0161,9.8314, 1.5003,2.1595
+	//float orig_anch[] = { 9.3813,6.0095, 3.3999,5.3505, 10.9476,11.1992, 5.0161,9.8314, 1.5003,2.1595 };
+	//for (i = 0; i < num_of_clusters * 2; ++i) centers->data.fl[i] = orig_anch[i];
+	
 	//for (i = 0; i < number_of_boxes; ++i)
 	//	printf("%2.2f,%2.2f, ", points->data.fl[i * 2], points->data.fl[i * 2 + 1]);
+
+	float avg_iou = 0;
+	for (i = 0; i < number_of_boxes; ++i) {
+		float box_w = points->data.fl[i * 2];
+		float box_h = points->data.fl[i * 2 + 1];
+		//int cluster_idx = labels->data.i[i];		
+		int cluster_idx = 0;
+		float min_dist = FLT_MAX;
+		for (j = 0; j < num_of_clusters; ++j) {
+			float anchor_w = centers->data.fl[j * 2];
+			float anchor_h = centers->data.fl[j * 2 + 1];
+			float w_diff = anchor_w - box_w;
+			float h_diff = anchor_h - box_h;
+			float distance = sqrt(w_diff*w_diff + h_diff*h_diff);
+			if (distance < min_dist) min_dist = distance, cluster_idx = j;
+		}
+		
+		float anchor_w = centers->data.fl[cluster_idx * 2];
+		float anchor_h = centers->data.fl[cluster_idx * 2 + 1];
+		float min_w = (box_w < anchor_w) ? box_w : anchor_w;
+		float min_h = (box_h < anchor_h) ? box_h : anchor_h;
+		float box_intersect = min_w*min_h;
+		float box_union = box_w*box_h + anchor_w*anchor_h - box_intersect;
+		float iou = box_intersect / box_union;
+		if (iou > 1 || iou < 0) {
+			printf(" i = %d, box_w = %d, box_h = %d, anchor_w = %d, anchor_h = %d, iou = %f \n",
+				i, box_w, box_h, anchor_w, anchor_h, iou);
+		}
+		else avg_iou += iou;
+	}
+	avg_iou = 100 * avg_iou / number_of_boxes;
+	printf("\n avg IoU = %2.2f %% \n", avg_iou);
+
+	char buff[1024];
+	FILE* fw = fopen("anchors.txt", "wb");
+	printf("\nSaving anchors to the file: anchors.txt \n");
+	printf("anchors = ");
+	for (i = 0; i < num_of_clusters; ++i) {
+		sprintf(buff, "%2.4f,%2.4f", centers->data.fl[i * 2], centers->data.fl[i * 2 + 1]);
+		printf("%s, ", buff);
+		fwrite(buff, sizeof(char), strlen(buff), fw);
+		if (i + 1 < num_of_clusters) fwrite(", ", sizeof(char), 2, fw);;
+	}
+	printf("\n");
+	fclose(fw);
+
+	if (show) {
+		size_t img_size = 700;
+		IplImage* img = cvCreateImage(cvSize(img_size, img_size), 8, 3);
+		cvZero(img);
+		for (j = 0; j < num_of_clusters; ++j) {
+			CvPoint pt1, pt2;
+			pt1.x = pt1.y = 0;
+			pt2.x = centers->data.fl[j * 2] * img_size / final_width;
+			pt2.y = centers->data.fl[j * 2 + 1] * img_size / final_height;
+			cvRectangle(img, pt1, pt2, CV_RGB(255, 255, 255), 1, 8, 0);
+		}
+
+		for (i = 0; i < number_of_boxes; ++i) {
+			CvPoint pt;
+			pt.x = points->data.fl[i * 2] * img_size / final_width;
+			pt.y = points->data.fl[i * 2 + 1] * img_size / final_height;
+			int cluster_idx = labels->data.i[i];
+			int red_id = (cluster_idx * (uint64_t)123 + 55) % 255;
+			int green_id = (cluster_idx * (uint64_t)321 + 33) % 255;
+			int blue_id = (cluster_idx * (uint64_t)11 + 99) % 255;
+			cvCircle(img, pt, 1, CV_RGB(red_id, green_id, blue_id), CV_FILLED, 8, 0);
+			//if(pt.x > img_size || pt.y > img_size) printf("\n pt.x = %d, pt.y = %d \n", pt.x, pt.y);
+		}
+		cvShowImage("clusters", img);
+		cvWaitKey(0);
+		cvReleaseImage(&img);
+		cvDestroyAllWindows();
+	}
 
 	free(rel_width_height_array);
 	cvReleaseMat(&points);
@@ -1024,7 +992,7 @@ void calc_anchors(char *datacfg, int num_of_clusters, int final_width, int final
 	cvReleaseMat(&labels);
 }
 #else
-void calc_anchors(char *datacfg, int num_of_clusters, int final_width, int final_height) {
+void calc_anchors(char *datacfg, int num_of_clusters, int final_width, int final_height, int show) {
 	printf(" k-means++ can't be used without OpenCV, because there is used cvKMeans2 implementation \n");
 }
 #endif // OPENCV
@@ -1076,7 +1044,6 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
         save_image(im, "predictions");
 		if (!dont_show) {
 			show_image(im, "predictions");
-            //save_image(croped_im, "croped_predictions");
 		}
 
         free_image(im);
@@ -1096,6 +1063,7 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
 void run_detector(int argc, char **argv)
 {
 	int dont_show = find_arg(argc, argv, "-dont_show");
+	int show = find_arg(argc, argv, "-show");
 	int http_stream_port = find_int_arg(argc, argv, "-http_port", -1);
 	char *out_filename = find_char_arg(argc, argv, "-out_filename", 0);
     char *prefix = find_char_arg(argc, argv, "-prefix", 0);
@@ -1141,12 +1109,11 @@ void run_detector(int argc, char **argv)
 		if (weights[strlen(weights) - 1] == 0x0d) weights[strlen(weights) - 1] = 0;
     char *filename = (argc > 6) ? argv[6]: 0;
     if(0==strcmp(argv[2], "test")) test_detector(datacfg, cfg, weights, filename, thresh, dont_show);
-    else if(0==strcmp(argv[2], "train")) train_detector(datacfg, cfg, weights, gpus, ngpus, clear);
-    else if(0==strcmp(argv[2], "2_image_train")) two_image_train_detector(datacfg, cfg, weights, gpus, ngpus, clear);
+    else if(0==strcmp(argv[2], "train")) train_detector(datacfg, cfg, weights, gpus, ngpus, clear, dont_show);
     else if(0==strcmp(argv[2], "valid")) validate_detector(datacfg, cfg, weights);
     else if(0==strcmp(argv[2], "recall")) validate_detector_recall(datacfg, cfg, weights);
 	else if(0==strcmp(argv[2], "map")) validate_detector_map(datacfg, cfg, weights, thresh);
-	else if(0==strcmp(argv[2], "calc_anchors"))  calc_anchors(datacfg, num_of_clusters, final_width, final_heigh);
+	else if(0==strcmp(argv[2], "calc_anchors")) calc_anchors(datacfg, num_of_clusters, final_width, final_heigh, show);
     else if(0==strcmp(argv[2], "demo")) {
         list *options = read_data_cfg(datacfg);
         int classes = option_find_int(options, "classes", 20);
@@ -1158,5 +1125,3 @@ void run_detector(int argc, char **argv)
 			http_stream_port, dont_show);
     }
 }
-
-

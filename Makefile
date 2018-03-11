@@ -1,4 +1,4 @@
-GPU=0
+GPU=1
 CUDNN=0
 OPENCV=1
 DEBUG=0
@@ -94,8 +94,11 @@ $(APPNAMESO): $(LIBNAMESO) src/yolo_v2_class.hpp src/yolo_console_dll.cpp
 	$(CPP) -std=c++11 $(COMMON) $(CFLAGS) -o $@ src/yolo_console_dll.cpp $(LDFLAGS) -L ./ -l:$(LIBNAMESO)
 endif
 
+dnn_face_recognition_ex.o: dnn_face_recognition_ex.cpp
+	g++ -O3 -DNDEBUG -DDLIB_JPEG_SUPPORT -DDLIB_PNG_SUPPORT -Wreturn-type -std=c++11 -I/usr/include/opencv -o obj/dnn_face_recognition_ex.o -c src/dnn_face_recognition_ex.cpp
+
 $(EXEC): $(OBJS)
-	$(CPP) $(COMMON) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+	$(CPP) $(COMMON) $(CFLAGS) -rdynamic /usr/local/lib/libdlib.a -lpthread -lnsl -lSM -lICE -lX11 -lXext -lpng -lz -ljpeg obj/dnn_face_recognition_ex.o $^ -o $@ $(LDFLAGS)
 
 $(OBJDIR)%.o: %.c $(DEPS)
 	$(CC) $(COMMON) $(CFLAGS) -c $< -o $@

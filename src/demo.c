@@ -8,6 +8,9 @@
 #include "box.h"
 #include "image.h"
 #include "demo.h"
+#include "dnn_face_recognition_ex.h"
+#include <sys/stat.h>
+#include <sys/types.h>
 #ifdef WIN32
 #include <time.h>
 #include <winsock.h>
@@ -29,7 +32,6 @@
 #endif
 image get_image_from_stream(CvCapture *cap);
 image crop_image_with_box(image im, int num, float thresh, box *boxes, float **probs, char **names, image **alphabet, int classes);
-float compare_image(image im_1, image im_2);
 
 static char **demo_names;
 static image **demo_alphabet;
@@ -117,47 +119,7 @@ void *detect_in_thread(void *ptr)
 	//draw_detections(det, l.w*l.h*l.n, demo_thresh, boxes, probs, demo_names, demo_alphabet, demo_classes);
 	draw_detections_cv(det_img, l.w*l.h*l.n, demo_thresh, boxes, probs, demo_names, demo_alphabet, demo_classes);
 
-#if 0
-    // need siamese network
-        layer feature_layer = net.layers[net.n-2];
-
-        if(g_face_list == NULL){
-            g_face_list = malloc(sizeof(struct face_list_st));
-            memset(g_face_list, 0x0, sizeof(struct face_list_st));
-            g_face_list->face_feature = get_convolutional_image(feature_layer);
-            crop_image_with_box(det, l.w*l.h*l.n, demo_thresh, boxes, probs, demo_names, demo_alphabet, demo_classes);
-        }
-        else{
-            image feature_map = get_convolutional_image(feature_layer);
-            float threshold = 0.3;
-            int existed = 0;
-
-            struct face_list_st *face_ptr = NULL,
-                *last_face = g_face_list;
-
-            face_ptr = g_face_list;
-            while(face_ptr){
-                if(compare_image(face_ptr->face_feature, feature_map) < threshold){
-                    existed = 1;
-                    break;
-                }
-
-                last_face = face_ptr;
-                face_ptr = face_ptr->next;
-            }
-
-            if(existed == 0){
-                face_ptr = malloc(sizeof(struct face_list_st));
-                memset(face_ptr, 0x0, sizeof(struct face_list_st));
-                face_ptr->face_feature = feature_map;
-                last_face->next = face_ptr;
-                crop_image_with_box(det, l.w*l.h*l.n, demo_thresh, boxes, probs, demo_names, demo_alphabet, demo_classes);
-            }
-        }
-#else
     crop_image_with_box(det, l.w*l.h*l.n, demo_thresh, boxes, probs, demo_names, demo_alphabet, demo_classes);
-#endif
-
 
 	return 0;
 }
@@ -201,6 +163,8 @@ void demo(char *cfgfile, char *weightfile, float thresh, int cam_index, const ch
 
     layer l = net.layers[net.n-1];
     int j;
+
+    mkdir("./faces", 0777);
 
     avg = (float *) calloc(l.outputs, sizeof(float));
     for(j = 0; j < FRAMES; ++j) predictions[j] = (float *) calloc(l.outputs, sizeof(float));
@@ -400,39 +364,17 @@ image crop_image_with_box(image im, int num, float thresh, box *boxes, float **p
             */
             t = time(NULL);
 
-            sprintf(buf, "%ld", time(&t));
+            sprintf(buf, "faces/%ld", time(&t));
 
             tmp_im = crop_image(im, left, top, abs(right - left), abs(bot - top));
             save_image(tmp_im, buf);
+
+            if(compare_face(buf, "target.jpg") == 0){
+                printf("get target\n");
+            }
+            
             free_image(tmp_im);
         }
     }
-}
-
-float compare_image(image im_1, image im_2){
-    if(im_1.w != im_2.w ||
-        im_1.h != im_2.h ||
-        im_1.c != im_2.c){
-        return 99999.9;
-    }
-
-    int width = im_1.w,
-        height = im_1.h,
-        channel = im_1.c,
-        x, y, c;
-
-    float norm = 0.0,
-        diff = 0.0;
-
-    for(x = 0; x < width; x ++){
-        for(y = 0; y < height; y ++){
-            for(c = 0; c < channel; c ++){
-                diff = get_pixel(im_1, x, y, c) - get_pixel(im_2, x, y, c);
-                norm = diff * diff;
-            }
-        }
-    }
-
-    return norm;
 }
 

@@ -39,4 +39,6 @@ uselib
 face_compare/train/*.jpg
 face_compare/test/*.jpg
 dlib_face_recognition_resnet_model_v1.dat
+Makefile
 shape_predictor_5_face_landmarks.dat
+Makefile

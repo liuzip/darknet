@@ -76,6 +76,38 @@ std::vector<matrix<rgb_pixel>> jitter_image(
     const matrix<rgb_pixel>& img
 );
 
+int compare_face(char *path1, char *path2){
+	if(path1 == NULL || path2 == NULL){
+		return -1;
+	}
+
+    anet_type net;
+    deserialize("dlib_face_recognition_resnet_model_v1.dat") >> net;
+
+	matrix<rgb_pixel> face1, face2;
+	std::vector<matrix<rgb_pixel>> faces;
+
+#if 0
+
+    load_image(face1, path1);
+    load_image(face2, path2);
+
+	faces.push_back(move(face1));
+	faces.push_back(move(face2));
+
+
+	std::vector<matrix<float,0,1>> face_descriptors = net(faces);
+
+	if (length(face_descriptors[0] - face_descriptors[1]) < 0.6){
+		return 0;
+	}
+	else{
+		return -1;
+	}
+#else
+	return 0;
+#endif
+}
 // ----------------------------------------------------------------------------------------
 /*
 int main(int argc, char** argv) try

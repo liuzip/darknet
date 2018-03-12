@@ -96,7 +96,7 @@ endif
 
 $(EXEC): $(OBJS)
 	g++ -O3 -DNDEBUG -DDLIB_JPEG_SUPPORT -DDLIB_PNG_SUPPORT -Wreturn-type -std=c++11 -I/usr/include/opencv -o obj/dnn_face_recognition_ex.o -c src/dnn_face_recognition_ex.cpp
-	$(CPP) $(COMMON) $(CFLAGS) -rdynamic /usr/local/lib/libdlib.a -lpthread -lnsl -lSM -lICE -lX11 -lXext -lpng -lz -ljpeg obj/dnn_face_recognition_ex.o $^ -o $@ $(LDFLAGS)
+	$(CPP) $(COMMON) $(CFLAGS) obj/dnn_face_recognition_ex.o $^ -o $@ -rdynamic /usr/local/lib/libdlib.a -lpthread -lnsl -lSM -lICE -lX11 -lXext -lpng -lz -ljpeg $(LDFLAGS)
 
 $(OBJDIR)%.o: %.c $(DEPS)
 	$(CC) $(COMMON) $(CFLAGS) -c $< -o $@

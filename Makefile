@@ -117,6 +117,6 @@ results:
 .PHONY: clean
 
 clean:
-	rm -rf $(OBJS) $(EXEC) $(LIBNAMESO) $(APPNAMESO)
+	rm -rf $(OBJS) $(EXEC) $(LIBNAMESO) $(APPNAMESO) obj/dnn_face_recognition_ex.o
 
 

@@ -75,8 +75,8 @@ using anet_type = loss_metric<fc_no_bias<128,avg_pool_everything<
 std::vector<matrix<rgb_pixel>> jitter_image(
     const matrix<rgb_pixel>& img
 );
-
-int compare_face(char *path1, char *path2){
+#if 1
+extern "C" int compare_face(char *path1, char *path2){
 	if(path1 == NULL || path2 == NULL){
 		return -1;
 	}
@@ -87,7 +87,6 @@ int compare_face(char *path1, char *path2){
 	matrix<rgb_pixel> face1, face2;
 	std::vector<matrix<rgb_pixel>> faces;
 
-#if 0
 
     load_image(face1, path1);
     load_image(face2, path2);
@@ -104,12 +103,10 @@ int compare_face(char *path1, char *path2){
 	else{
 		return -1;
 	}
-#else
-	return 0;
-#endif
+
 }
 // ----------------------------------------------------------------------------------------
-/*
+#else
 int main(int argc, char** argv) try
 {
     if (argc != 2)
@@ -229,7 +226,7 @@ catch (std::exception& e)
 {
     cout << e.what() << endl;
 }
-*/
+#endif
 
 // ----------------------------------------------------------------------------------------
 

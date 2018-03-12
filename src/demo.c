@@ -32,6 +32,7 @@
 #endif
 image get_image_from_stream(CvCapture *cap);
 image crop_image_with_box(image im, int num, float thresh, box *boxes, float **probs, char **names, image **alphabet, int classes);
+int compare_face(char *path1, char *path2);
 
 static char **demo_names;
 static image **demo_alphabet;
